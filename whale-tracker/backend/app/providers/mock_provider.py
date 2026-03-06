@@ -9,22 +9,30 @@ class MockCryptoProvider(Provider):
 
     async def fetch_events(self) -> list[NormalizedEvent]:
         now = datetime.utcnow()
-        amount = random.uniform(200_000, 5_000_000)
+        amount = random.uniform(200_000, 7_500_000)
+        side = random.choice(["buy", "sell", "long", "short", "in", "out"])
+        whale_wallet = random.choice(["0xwhaleA", "0xwhaleB", "0xwhaleC", "0xfundDesk1"])
         return [
             NormalizedEvent(
-                event_uid=f"mock-crypto-{int(now.timestamp())}",
+                event_uid=f"mock-crypto-{int(now.timestamp())}-{random.randint(1, 9999)}",
                 timestamp=now,
-                asset_symbol=random.choice(["BTC", "ETH"]),
+                asset_symbol=random.choice(["BTC", "ETH", "SOL", "BNB"]),
                 asset_type="crypto",
-                event_type=random.choice(["large_transfer", "exchange_flow", "large_swap"]),
+                event_type=random.choice(["large_transfer", "exchange_flow", "large_swap", "derivatives_position"]),
                 amount_usd=amount,
-                direction=random.choice(["in", "out", "unknown"]),
-                from_label="wallet_a",
-                to_label="exchange_x",
-                tx_hash=f"0x{int(amount)}",
-                confidence=0.65,
+                direction=side,
+                from_label=whale_wallet,
+                to_label=random.choice(["binance", "coinbase", "bybit", "cold_storage"]),
+                tx_hash=f"0x{int(amount)}{random.randint(1000, 9999)}",
+                confidence=0.72,
                 source=self.name,
-                payload={"note": "mock event"},
+                payload={
+                    "note": "mock whale event",
+                    "side": side,
+                    "quantity": round(random.uniform(10, 2500), 4),
+                    "price": round(random.uniform(40, 72000), 2),
+                    "wallet": whale_wallet,
+                },
             )
         ]
 
@@ -50,7 +58,14 @@ class MockStockProvider(Provider):
                 tx_hash=None,
                 confidence=0.6,
                 source=self.name,
-                payload={"percent_move": pct, "volume_multiple": volume, "volatility": random.uniform(1.0, 4.0), "price": random.uniform(100, 300)},
+                payload={
+                    "percent_move": pct,
+                    "volume_multiple": volume,
+                    "volatility": random.uniform(1.0, 4.0),
+                    "price": random.uniform(100, 300),
+                    "side": random.choice(["buy", "sell", "long", "short"]),
+                    "quantity": round(random.uniform(1000, 25000), 2),
+                },
             )
         ]
 

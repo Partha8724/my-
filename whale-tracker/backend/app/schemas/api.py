@@ -34,3 +34,23 @@ class AlertOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class EventOut(BaseModel):
+    id: int
+    event_uid: str
+    timestamp: datetime
+    asset_symbol: str
+    asset_type: str
+    event_type: str
+    amount_usd: float | None
+    direction: str | None
+    from_label: str | None
+    to_label: str | None
+    tx_hash: str | None
+    confidence: float
+    source: str
+    payload: dict
+
+    class Config:
+        from_attributes = True
