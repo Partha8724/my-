@@ -1,63 +1,33 @@
-from fastapi import FastAPI, Depends
+import asyncio
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
 
-from app.db.session import Base, engine, get_db
-from app.models.entities import Alert, Rule, Asset
-from app.schemas.api import RuleIn, RuleOut, AlertOut
-from app.workers.ingestion import ingestion_service
+from app.api.routes import router
+from app.core.config import settings
+from app.core.logging import setup_logging
+from app.workers.ingestion import run_ingestion
 
-app = FastAPI(title="Whale Tracker & Cross-Asset Alert")
+ingestion_task: asyncio.Task | None = None
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global ingestion_task
+    setup_logging()
+    ingestion_task = asyncio.create_task(run_ingestion())
+    yield
+    if ingestion_task:
+        ingestion_task.cancel()
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[x.strip() for x in settings.cors_origins.split(",")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.on_event("startup")
-def startup():
-    Base.metadata.create_all(bind=engine)
-    ingestion_service.start()
-
-
-@app.on_event("shutdown")
-def shutdown():
-    ingestion_service.stop()
-
-
-@app.get("/health")
-def health():
-    return {"status": "ok", "last_run": ingestion_service.last_run, "last_error": ingestion_service.last_error}
-
-
-@app.get("/alerts", response_model=list[AlertOut])
-def alerts(asset: str | None = None, event_type: str | None = None, db: Session = Depends(get_db)):
-    q = db.query(Alert).order_by(Alert.created_at.desc())
-    if asset:
-        q = q.filter(Alert.message.ilike(f"%{asset}%"))
-    if event_type:
-        q = q.filter(Alert.message.ilike(f"%{event_type}%"))
-    return q.limit(200).all()
-
-
-@app.get("/rules", response_model=list[RuleOut])
-def list_rules(db: Session = Depends(get_db)):
-    return db.query(Rule).order_by(Rule.id.desc()).all()
-
-
-@app.post("/rules", response_model=RuleOut)
-def create_rule(payload: RuleIn, db: Session = Depends(get_db)):
-    rule = Rule(**payload.model_dump())
-    db.add(rule)
-    db.commit()
-    db.refresh(rule)
-    return rule
-
-
-@app.get("/assets")
-def assets(db: Session = Depends(get_db)):
-    return db.query(Asset).all()
+app.include_router(router)

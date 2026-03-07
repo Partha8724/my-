@@ -1,26 +1,39 @@
-from dataclasses import dataclass
-from datetime import datetime
+from abc import ABC, abstractmethod
+from collections.abc import AsyncGenerator
+from typing import Any
 
 
-@dataclass
-class NormalizedEvent:
-    event_uid: str
-    timestamp: datetime
-    asset_symbol: str
-    asset_type: str
-    event_type: str
-    amount_usd: float | None
-    direction: str | None
-    from_label: str | None
-    to_label: str | None
-    tx_hash: str | None
-    confidence: float
-    source: str
-    payload: dict
+class BaseMarketDataProvider(ABC):
+    name: str
+
+    @abstractmethod
+    async def subscribe_trades(self, symbols: list[str]) -> AsyncGenerator[dict[str, Any], None]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def subscribe_ticker(self, symbols: list[str]) -> AsyncGenerator[dict[str, Any], None]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def fetch_ohlcv(self, symbol: str, timeframe: str = "1m") -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def fetch_open_interest(self, symbol: str) -> dict[str, Any] | None:
+        return None
+
+    async def fetch_liquidations(self, symbol: str) -> dict[str, Any] | None:
+        return None
+
+    @abstractmethod
+    async def health_check(self) -> dict[str, str]:
+        raise NotImplementedError
 
 
-class Provider:
-    name = "base"
+class BaseOrderFlowProvider(BaseMarketDataProvider):
+    pass
 
-    async def fetch_events(self) -> list[NormalizedEvent]:
+
+class BaseAlertProvider(ABC):
+    @abstractmethod
+    async def send(self, payload: dict[str, Any]) -> None:
         raise NotImplementedError

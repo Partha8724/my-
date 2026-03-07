@@ -1,88 +1,91 @@
 import asyncio
 import logging
-import structlog
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from datetime import datetime
 
-from app.config import settings
-from app.db.session import SessionLocal
-from app.models.entities import Event, Rule, Alert
-from app.notifications.sender import send_email, send_telegram
-from app.providers.base import Provider
-from app.providers.ccxt_provider import CCXTTradeSpikeProvider
-from app.providers.mock_provider import MockCryptoProvider, MockStockProvider, MockXAUProvider
-from app.providers.real_providers import WhaleAlertProvider, TwelveDataXAUProvider
-from app.rules.engine import should_trigger, dedupe_key
+from app.notifications.sender import dispatch_notifications
+from app.providers.mock_provider import MockUnifiedProvider
+from app.services.alert_policy import alert_policy
+from app.services.analytics import analytics_engine
+from app.services.engine import build_signal_card, engine
+from app.services.realtime import manager
+from app.services.store import admin_settings, alerts, market_cache, provider_status, signals
 
-structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(logging.INFO))
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
+provider = MockUnifiedProvider()
+TRACKED_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT", "DOGEUSDT", "XAUUSD", "XAGUSD"]
 
 
-class IngestionService:
-    def __init__(self):
-        self.scheduler = AsyncIOScheduler()
-        self.last_run = None
-        self.last_error = None
+def _severity(confidence: int) -> str:
+    if confidence >= 90:
+        return "extreme"
+    if confidence >= 75:
+        return "high"
+    if confidence >= 60:
+        return "medium"
+    return "low"
 
-    def get_providers(self) -> list[Provider]:
-        providers: list[Provider] = []
-        providers.append(MockStockProvider() if settings.stock_provider == "mock" else MockStockProvider())
-        providers.append(MockCryptoProvider() if settings.crypto_provider == "mock" else WhaleAlertProvider())
-        providers.append(MockXAUProvider() if settings.xau_provider == "mock" else TwelveDataXAUProvider())
-        providers.append(CCXTTradeSpikeProvider())
-        return providers
 
-    async def run_cycle(self):
-        db = SessionLocal()
+async def _loop_once() -> None:
+    async for event in provider.subscribe_trades(TRACKED_SYMBOLS):
+        symbol = event["symbol"]
+        if not admin_settings.get("asset_enabled", {}).get(symbol, True):
+            continue
+
+        now = datetime.utcnow()
+        analytics = analytics_engine.update(symbol, event["side"], event["size"], event["price"], now)
+
+        snapshot = market_cache.setdefault(symbol, {"symbol": symbol, "price": event["price"], "change_24h": 0, "volume": 0, "history": [], "analytics": {}})
+        snapshot["price"] = event["price"]
+        snapshot["volume"] = snapshot.get("volume", 0) + event["size"]
+        snapshot["last_event"] = event
+        snapshot["analytics"] = analytics
+        snapshot["history"] = (snapshot.get("history", []) + [{"t": now.isoformat(), "c": event["price"], "v": event["size"]}])[-200:]
+
+        results = engine.evaluate_event(event, analytics)
+        for r in results:
+            signature = f"{symbol}:{r.title}:{r.direction}:{r.source_label}"
+            ok, reason = alert_policy.should_emit(symbol, signature, r.confidence, now)
+            if not ok:
+                logger.debug("suppressed signal %s due to %s", signature, reason)
+                continue
+
+            alert = {
+                "id": len(alerts) + 1,
+                "asset": symbol,
+                "direction": r.direction,
+                "confidence": r.confidence,
+                "reason": r.reason,
+                "source_label": r.source_label,
+                "severity": _severity(r.confidence),
+                "timestamp": now.isoformat(),
+                "suppression_reason": reason,
+            }
+            alerts.append(alert)
+            signal = {"id": len(signals) + 1, **build_signal_card(symbol, r, event["price"], analytics)}
+            signals.append(signal)
+            await dispatch_notifications(alert)
+            await manager.broadcast({"type": "alert", "payload": alert})
+            await manager.broadcast({"type": "signal", "payload": signal})
+
+        await manager.broadcast({"type": "ticker", "payload": snapshot})
+        provider_status[0]["updated_at"] = now.isoformat()
+        await asyncio.sleep(0)
+
+
+async def run_ingestion() -> None:
+    retries = 0
+    while True:
         try:
-            for provider in self.get_providers():
-                try:
-                    events = await provider.fetch_events()
-                    for item in events:
-                        event = Event(**item.__dict__)
-                        db.add(event)
-                        try:
-                            db.commit()
-                        except IntegrityError:
-                            db.rollback()
-                            continue
-                        await self._evaluate_rules(db, event)
-                except Exception as exc:
-                    self.last_error = str(exc)
-                    logger.error("provider_error", provider=provider.name, error=str(exc))
-            self.last_run = "ok"
-        finally:
-            db.close()
-
-    async def _evaluate_rules(self, db: Session, event: Event):
-        rules = db.query(Rule).filter(Rule.enabled.is_(True)).all()
-        for rule in rules:
-            last = db.query(Alert).filter(Alert.rule_name == rule.name).order_by(Alert.created_at.desc()).first()
-            trigger, why = should_trigger(rule, event, last)
-            if not trigger:
-                continue
-            key = dedupe_key(rule, event)
-            existing = db.query(Alert).filter(Alert.dedupe_key == key).first()
-            if existing:
-                continue
-            msg = (
-                f"{event.asset_symbol} {event.event_type} size=${event.amount_usd or 0:,.0f} "
-                f"time={event.timestamp.isoformat()} source={event.source} why={why}"
-            )
-            alert = Alert(event_uid=event.event_uid, rule_name=rule.name, dedupe_key=key, message=msg)
-            db.add(alert)
-            db.commit()
-            alert.delivered_telegram = await send_telegram(alert)
-            alert.delivered_email = await send_email(alert)
-            db.commit()
-
-    def start(self):
-        self.scheduler.add_job(lambda: asyncio.create_task(self.run_cycle()), "interval", seconds=settings.poll_interval_seconds)
-        self.scheduler.start()
-
-    def stop(self):
-        self.scheduler.shutdown(wait=False)
-
-
-ingestion_service = IngestionService()
+            await _loop_once()
+        except asyncio.CancelledError:
+            logger.info("ingestion cancelled")
+            raise
+        except Exception as exc:
+            retries += 1
+            delay = min(20, 2**retries)
+            provider_status[0]["status"] = "degraded"
+            provider_status[0]["message"] = f"retrying after error: {exc.__class__.__name__}"
+            logger.exception("ingestion error (attempt=%s), retrying in %ss", retries, delay)
+            await asyncio.sleep(delay)
+            if retries > 100:
+                raise

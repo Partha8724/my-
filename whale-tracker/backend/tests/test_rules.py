@@ -1,61 +1,48 @@
 from datetime import datetime, timedelta
 
-from app.models.entities import Rule, Event, Alert
-from app.rules.engine import should_trigger, dedupe_key
+from app.services.alert_policy import AlertPolicy
+from app.services.analytics import analytics_engine
+from app.services.engine import engine
 
 
-def mk_rule(**kwargs):
-    base = dict(
-        name="r1",
-        asset_type="crypto",
-        symbol="BTC",
-        threshold_usd=1_000_000,
-        percent_move=0,
-        volume_multiple=0,
-        volatility_threshold=0,
-        key_levels=[],
-        cooldown_minutes=15,
-        quiet_hours=[],
-        enabled=True,
-    )
-    base.update(kwargs)
-    return Rule(**base)
+def test_large_trade_signal_generation():
+    event = {
+        "symbol": "BTCUSDT",
+        "asset_type": "crypto",
+        "event_type": "trade",
+        "side": "buy",
+        "size": 1_500_000,
+        "price": 67000,
+        "metadata": {"signal_source": "confirmed trade flow"},
+    }
+    analytics = analytics_engine.update("BTCUSDT", "buy", 1_500_000, 67000, datetime.utcnow())
+    analytics["volatility"] = 0.01
+    res = engine.evaluate_event(event, analytics)
+    assert any("Whale" in r.title for r in res)
 
 
-def mk_event(**kwargs):
-    base = dict(
-        event_uid="e1",
-        timestamp=datetime.utcnow(),
-        asset_symbol="BTC",
-        asset_type="crypto",
-        event_type="large_transfer",
-        amount_usd=2_000_000,
-        direction="in",
-        from_label="a",
-        to_label="b",
-        tx_hash="0x1",
-        confidence=0.8,
-        source="test",
-        payload={"percent_move": 3, "volume_multiple": 4, "volatility": 2, "price": 2400},
-    )
-    base.update(kwargs)
-    return Event(**base)
+def test_xau_proxy_generation():
+    event = {
+        "symbol": "XAUUSD",
+        "asset_type": "metal",
+        "event_type": "trade",
+        "side": "sell",
+        "size": 600000,
+        "price": 1990,
+        "metadata": {"signal_source": "derived signal"},
+    }
+    analytics = analytics_engine.update("XAUUSD", "sell", 600000, 1990, datetime.utcnow())
+    analytics["volatility"] = 0.01
+    res = engine.evaluate_event(event, analytics)
+    assert any("Gold" in r.title for r in res)
 
 
-def test_should_trigger_threshold_passes():
-    ok, why = should_trigger(mk_rule(), mk_event())
-    assert ok is True
-    assert why == "triggered"
-
-
-def test_should_trigger_cooldown_blocks():
-    last = Alert(created_at=datetime.utcnow() - timedelta(minutes=1), event_uid="e0", rule_name="r1", dedupe_key="k", message="m")
-    ok, why = should_trigger(mk_rule(cooldown_minutes=10), mk_event(), last)
-    assert ok is False
-    assert why == "cooldown"
-
-
-def test_dedupe_key_stable_bucket():
-    e = mk_event(timestamp=datetime(2025, 1, 1, 12, 3, 0))
-    key = dedupe_key(mk_rule(name="test"), e)
-    assert key.startswith("test:BTC:large_transfer:")
+def test_alert_policy_confirmation_and_cooldown():
+    policy = AlertPolicy()
+    now = datetime.utcnow()
+    ok, _ = policy.should_emit("BTCUSDT", "sig", 90, now)
+    assert not ok
+    ok, _ = policy.should_emit("BTCUSDT", "sig", 90, now + timedelta(seconds=2))
+    assert ok
+    ok, reason = policy.should_emit("BTCUSDT", "sig2", 90, now + timedelta(seconds=5))
+    assert not ok and reason == "symbol cooldown"
