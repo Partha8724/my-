@@ -1,109 +1,109 @@
-# Whale Tracker & Cross-Asset Alert (MVP)
+# WhaleScope
 
-Production-minded MVP for monitoring crypto whale flows, unusual stock activity, and XAUUSD movement.
+Production-style full-stack whale activity dashboard for Crypto + XAUUSD + XAGUSD.
 
-## Stack
-- Backend: FastAPI + APScheduler + SQLAlchemy (SQLite default)
-- Frontend: React (Vite)
-- Notifications: Telegram + SMTP email
-- Infra: Docker Compose (includes Redis service for future Celery upgrade)
+## Project tree
+
+```text
+whale-tracker/
+├── backend/
+│   ├── app/
+│   │   ├── alerts/engine.py
+│   │   ├── api/routes.py
+│   │   ├── core/{config.py,security.py}
+│   │   ├── db/session.py
+│   │   ├── models/entities.py
+│   │   ├── providers/{base.py,factory.py,mock_provider.py}
+│   │   ├── schemas/api.py
+│   │   ├── services/{state.py,streamer.py,ws.py}
+│   │   ├── signals/detectors.py
+│   │   ├── utils/normalizer.py
+│   │   ├── workers/celery_app.py
+│   │   └── main.py
+│   ├── alembic/
+│   ├── tests/
+│   ├── seed_demo.py
+│   ├── requirements.txt
+│   └── Dockerfile
+├── frontend/
+│   ├── app/ (dashboard + asset detail + alerts + signals + watchlist + settings)
+│   ├── components/
+│   ├── lib/api.ts
+│   ├── package.json
+│   └── Dockerfile
+├── docker-compose.yml
+└── .env.example
+```
 
 ## Features
-- Unified asset registry (`asset_id`, `asset_type`, `symbol`, `venue`)
-- Unified event normalization for crypto/stocks/metals
-- Rule engine with:
-  - `threshold_usd`
-  - `percent_move`
-  - `volume_multiple`
-  - `volatility_threshold`
-  - `key_levels`
-  - `cooldown_minutes`
-  - `quiet_hours`
-- Dedupe key per rule/asset/event time bucket
-- Alert persistence and API feed
-- Dashboard pages in one UI:
-  - Alerts feed
-  - Rules/config
-  - Asset watchlist
-  - Health status
-- `/health` endpoint and provider error capture
-- Unit tests for trigger + dedupe behavior
+- Live multi-asset dashboard (Crypto / XAUUSD / XAGUSD)
+- Realtime event stream over WebSocket with polling-capable HTTP endpoints
+- Alert + signal engine with confidence scoring and severity model
+- Provider abstraction (`BaseMarketDataProvider`) and demo mock provider
+- Signal source labels: `confirmed trade flow`, `exchange liquidation/open interest data`, `volume spike proxy`, `futures tape proxy`, `mock/demo data`
+- Data source confidence labels in UI (`high/medium/low confidence`)
+- Watchlist API + settings controls (thresholds, confidence cutoff, per-asset tracking)
+- CSV alerts export endpoint
+- JWT admin auth endpoint
+- Demo/live and provider health status badges
+- Celery worker scaffold + Redis + PostgreSQL
 
-## Data Providers
-### Crypto
-- `mock` provider (default; no key required)
-- Whale Alert official API (`CRYPTO_PROVIDER=whale` + `WHALE_ALERT_API_KEY`)
-- Binance trade spike signal via CCXT public endpoint (enabled by default)
+## Run locally
 
-### Stocks
-- `mock` provider included for free running demo
-- Abstraction point is in `app/providers/` for plugging Alpaca / IEX / Polygon providers.
-
-### XAUUSD
-- `mock` provider (default)
-- Twelve Data (`XAU_PROVIDER=twelve` + `TWELVEDATA_API_KEY`)
-
-## Setup
-1. Copy env file:
-   ```bash
-   cp .env.example .env
-   ```
-2. Edit `.env` and add keys you own.
-3. Run backend locally:
-   ```bash
-   cd backend
-   python -m venv .venv && source .venv/bin/activate
-   pip install -r requirements.txt
-   python -m app.cli
-   uvicorn app.main:app --reload
-   ```
-4. Run frontend locally:
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
-
-## Docker Compose
-```bash
-docker compose up --build
-```
-- API: http://localhost:8000
-- Frontend: http://localhost:5173
-
-## Seed demo assets/rules
+### Backend
 ```bash
 cd backend
-python -m app.cli
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp ../.env.example .env
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-## Telegram Configuration
-1. Create a bot with BotFather and get token.
-2. Get your target chat ID.
-3. Set:
-   - `TELEGRAM_BOT_TOKEN`
-   - `TELEGRAM_CHAT_ID`
+### Frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-## Email Configuration
-Set SMTP values:
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `EMAIL_FROM`, `EMAIL_TO`
+App URLs:
+- Frontend: http://localhost:3000
+- Backend: http://localhost:8000
+- API docs: http://localhost:8000/docs
 
-## Testing
+## Run with Docker
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+## Demo mode behavior
+If no live credentials are configured, WhaleScope runs in `DEMO_MODE=true` and:
+- streams realistic synthetic trade/ticker events
+- simulates whale trades and derived pressure
+- clearly labels source as `mock/demo data`
+
+## Provider architecture
+- `BaseMarketDataProvider` standardizes:
+  - `subscribe_trades()`
+  - `subscribe_ticker()`
+  - `fetch_ohlcv()`
+  - `fetch_open_interest()`
+  - `fetch_liquidations()`
+  - `health_check()`
+- Add real adapters (Binance/Bybit/broker feeds) by implementing the same interface.
+
+## Security + config
+- `.env` driven settings (no hardcoded runtime secrets)
+- JWT login endpoint `/api/auth/login`
+- CORS configured via `CORS_ORIGINS`
+
+## Tests
 ```bash
 cd backend
 pytest -q
 ```
 
-## MVP to Production Upgrades
-- Replace APScheduler with Celery workers + Redis queues.
-- Add PostgreSQL and Alembic migrations.
-- Add auth (JWT or magic link) and multi-user rule ownership.
-- Add Discord notifier and webhook-based incident routing.
-- Add historical analytics and charts for signal quality.
+## Notes on realism
+XAUUSD/XAGUSD direct institutional tape is not fabricated. When direct flow is unavailable, WhaleScope uses derived proxies and labels source + confidence explicitly.
 
-## Extending to more chains/assets
-1. Implement a new provider class in `app/providers/` returning `NormalizedEvent` objects.
-2. Register it in `IngestionService.get_providers()`.
-3. Add new symbols to `Asset` watchlist via UI or seed CLI.
-4. Expand event payload fields as needed (e.g., gas, chain_id, venue depth).
-5. Add specialized rules per asset type while keeping normalized schema stable.

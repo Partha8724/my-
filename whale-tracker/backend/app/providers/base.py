@@ -1,26 +1,25 @@
-from dataclasses import dataclass
-from datetime import datetime
+from __future__ import annotations
+from abc import ABC, abstractmethod
+from collections.abc import AsyncGenerator
 
 
-@dataclass
-class NormalizedEvent:
-    event_uid: str
-    timestamp: datetime
-    asset_symbol: str
-    asset_type: str
-    event_type: str
-    amount_usd: float | None
-    direction: str | None
-    from_label: str | None
-    to_label: str | None
-    tx_hash: str | None
-    confidence: float
-    source: str
-    payload: dict
+class BaseMarketDataProvider(ABC):
+    name: str = 'base'
 
+    @abstractmethod
+    async def subscribe_trades(self, symbol: str) -> AsyncGenerator[dict, None]: ...
 
-class Provider:
-    name = "base"
+    @abstractmethod
+    async def subscribe_ticker(self, symbol: str) -> AsyncGenerator[dict, None]: ...
 
-    async def fetch_events(self) -> list[NormalizedEvent]:
-        raise NotImplementedError
+    @abstractmethod
+    async def fetch_ohlcv(self, symbol: str, timeframe: str = '1m', limit: int = 100) -> list[dict]: ...
+
+    async def fetch_open_interest(self, symbol: str) -> dict | None:
+        return None
+
+    async def fetch_liquidations(self, symbol: str) -> list[dict] | None:
+        return None
+
+    @abstractmethod
+    async def health_check(self) -> dict: ...
