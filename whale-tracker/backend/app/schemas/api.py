@@ -2,35 +2,33 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
-class RuleIn(BaseModel):
-    name: str
-    asset_type: str = "any"
-    symbol: str = "*"
-    threshold_usd: float = 0
-    percent_move: float = 0
-    volume_multiple: float = 0
-    volatility_threshold: float = 0
-    key_levels: list[float] = []
-    cooldown_minutes: int = 15
-    quiet_hours: list[list[int]] = []
+class WatchlistCreate(BaseModel):
+    symbol: str
+    whale_threshold: float = 500000
+    min_confidence: int = 60
+    cooldown_seconds: int = 120
     enabled: bool = True
 
 
-class RuleOut(RuleIn):
-    id: int
-
-    class Config:
-        from_attributes = True
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 
 class AlertOut(BaseModel):
     id: int
-    created_at: datetime
-    event_uid: str
-    rule_name: str
-    message: str
-    delivered_telegram: bool
-    delivered_email: bool
+    symbol: str
+    direction: str
+    confidence: int
+    reason: str
+    signal_source: str
+    severity: str
+    timestamp: datetime
 
-    class Config:
-        from_attributes = True
+
+class MarketOverviewOut(BaseModel):
+    symbol: str
+    price: float
+    change_24h: float
+    volume: float
+    pressure: float
