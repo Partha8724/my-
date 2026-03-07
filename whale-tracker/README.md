@@ -1,109 +1,88 @@
-# Whale Tracker & Cross-Asset Alert (MVP)
+# WhaleScope
 
-Production-minded MVP for monitoring crypto whale flows, unusual stock activity, and XAUUSD movement.
+Production-style full-stack whale activity dashboard for **Crypto, XAUUSD, XAGUSD** with realtime signals, advanced proxy analytics, provider abstraction, and demo mode.
 
-## Stack
-- Backend: FastAPI + APScheduler + SQLAlchemy (SQLite default)
-- Frontend: React (Vite)
-- Notifications: Telegram + SMTP email
-- Infra: Docker Compose (includes Redis service for future Celery upgrade)
+## What improved
+- Noise reduction pipeline:
+  - per-symbol cooldown
+  - duplicate alert suppression
+  - confidence threshold filter
+  - multi-hit confirmation window
+- Advanced analytics:
+  - rolling buy/sell imbalance
+  - cumulative delta proxy
+  - volatility filter
+  - trend regime filter
+- Professional dashboard UI:
+  - stronger dark theme
+  - heatmap
+  - top movers panel
+  - signal breakdown modal
+- Deployment polish:
+  - healthchecks in compose
+  - structured config validation + prod guardrails
+  - logging setup
+  - ingestion retry logic
+- More realistic demo simulator:
+  - whale bursts
+  - periodic volume spikes
+  - regime switches for XAUUSD/XAGUSD
 
-## Features
-- Unified asset registry (`asset_id`, `asset_type`, `symbol`, `venue`)
-- Unified event normalization for crypto/stocks/metals
-- Rule engine with:
-  - `threshold_usd`
-  - `percent_move`
-  - `volume_multiple`
-  - `volatility_threshold`
-  - `key_levels`
-  - `cooldown_minutes`
-  - `quiet_hours`
-- Dedupe key per rule/asset/event time bucket
-- Alert persistence and API feed
-- Dashboard pages in one UI:
-  - Alerts feed
-  - Rules/config
-  - Asset watchlist
-  - Health status
-- `/health` endpoint and provider error capture
-- Unit tests for trigger + dedupe behavior
+## Project tree
 
-## Data Providers
-### Crypto
-- `mock` provider (default; no key required)
-- Whale Alert official API (`CRYPTO_PROVIDER=whale` + `WHALE_ALERT_API_KEY`)
-- Binance trade spike signal via CCXT public endpoint (enabled by default)
-
-### Stocks
-- `mock` provider included for free running demo
-- Abstraction point is in `app/providers/` for plugging Alpaca / IEX / Polygon providers.
-
-### XAUUSD
-- `mock` provider (default)
-- Twelve Data (`XAU_PROVIDER=twelve` + `TWELVEDATA_API_KEY`)
+```text
+whale-tracker/
+  backend/
+    app/
+      api/ core/ models/ schemas/ services/ providers/ alerts/ signals/ db/ workers/ utils/
+    alembic/
+    tests/
+    Dockerfile
+  frontend/
+    app/ components/ lib/ types/
+    Dockerfile
+  docker-compose.yml
+  .env.example
+```
 
 ## Setup
-1. Copy env file:
-   ```bash
-   cp .env.example .env
-   ```
-2. Edit `.env` and add keys you own.
-3. Run backend locally:
-   ```bash
-   cd backend
-   python -m venv .venv && source .venv/bin/activate
-   pip install -r requirements.txt
-   python -m app.cli
-   uvicorn app.main:app --reload
-   ```
-4. Run frontend locally:
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
 
-## Docker Compose
-```bash
-docker compose up --build
-```
-- API: http://localhost:8000
-- Frontend: http://localhost:5173
-
-## Seed demo assets/rules
-```bash
-cd backend
-python -m app.cli
-```
-
-## Telegram Configuration
-1. Create a bot with BotFather and get token.
-2. Get your target chat ID.
-3. Set:
-   - `TELEGRAM_BOT_TOKEN`
-   - `TELEGRAM_CHAT_ID`
-
-## Email Configuration
-Set SMTP values:
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `EMAIL_FROM`, `EMAIL_TO`
-
-## Testing
+### Local
 ```bash
 cd backend
 pytest -q
+uvicorn app.main:app --reload --port 8000
 ```
 
-## MVP to Production Upgrades
-- Replace APScheduler with Celery workers + Redis queues.
-- Add PostgreSQL and Alembic migrations.
-- Add auth (JWT or magic link) and multi-user rule ownership.
-- Add Discord notifier and webhook-based incident routing.
-- Add historical analytics and charts for signal quality.
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-## Extending to more chains/assets
-1. Implement a new provider class in `app/providers/` returning `NormalizedEvent` objects.
-2. Register it in `IngestionService.get_providers()`.
-3. Add new symbols to `Asset` watchlist via UI or seed CLI.
-4. Expand event payload fields as needed (e.g., gas, chain_id, venue depth).
-5. Add specialized rules per asset type while keeping normalized schema stable.
+### Docker
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+## API
+- `GET /health`
+- `POST /api/auth/login`
+- `GET /api/assets`
+- `GET /api/settings`
+- `PUT /api/settings`
+- `GET /api/watchlist`
+- `POST /api/watchlist`
+- `DELETE /api/watchlist/{id}`
+- `GET /api/alerts`
+- `GET /api/alerts/export.csv`
+- `GET /api/signals`
+- `GET /api/providers/status`
+- `GET /api/market/overview`
+- `GET /api/market/{symbol}`
+- `GET /api/market/{symbol}/history`
+- `WS /ws/stream`
+
+## Realism policy
+For XAUUSD/XAGUSD, when direct institutional flow is unavailable, WhaleScope emits labeled derived/proxy signals and confidence context.

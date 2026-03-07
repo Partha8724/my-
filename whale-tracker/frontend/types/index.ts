@@ -1,0 +1,2 @@
+export type Alert = { id:number; asset:string; direction:string; confidence:number; reason:string; source_label:string; severity:string; timestamp:string }
+export type Signal = { id:number; asset:string; title:string; direction:string; confidence:number; source_label:string; entry_zone:string; invalidation:string; target1:string; target2:string; risk_note:string; why:string; timestamp:string; analytics?: { buy_sell_imbalance:number; cumulative_delta:number; volatility:number; trend_regime:string } }
