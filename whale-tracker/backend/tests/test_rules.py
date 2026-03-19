@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 from app.models.entities import Rule, Event, Alert
 from app.rules.engine import should_trigger, dedupe_key
+from app.utils import utc_now
 
 
 def mk_rule(**kwargs):
@@ -25,7 +26,7 @@ def mk_rule(**kwargs):
 def mk_event(**kwargs):
     base = dict(
         event_uid="e1",
-        timestamp=datetime.utcnow(),
+        timestamp=utc_now(),
         asset_symbol="BTC",
         asset_type="crypto",
         event_type="large_transfer",
@@ -49,7 +50,7 @@ def test_should_trigger_threshold_passes():
 
 
 def test_should_trigger_cooldown_blocks():
-    last = Alert(created_at=datetime.utcnow() - timedelta(minutes=1), event_uid="e0", rule_name="r1", dedupe_key="k", message="m")
+    last = Alert(created_at=utc_now() - timedelta(minutes=1), event_uid="e0", rule_name="r1", dedupe_key="k", message="m")
     ok, why = should_trigger(mk_rule(cooldown_minutes=10), mk_event(), last)
     assert ok is False
     assert why == "cooldown"

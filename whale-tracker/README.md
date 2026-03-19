@@ -2,6 +2,28 @@
 
 Production-minded MVP for monitoring crypto whale flows, unusual stock activity, and XAUUSD movement.
 
+## Current Status
+- Backend tests are passing.
+- Frontend production build is passing.
+- Windows helper scripts are included:
+  - `start.bat` starts backend and frontend in separate CMD windows.
+  - `stop.bat` closes those windows.
+- Default demo mode works with mock providers, so you can run the app without paid APIs.
+
+## Windows Quick Start
+1. Open `C:\Users\HP\crypto-whale-tracker\whale-tracker`
+2. Double-click `start.bat`
+3. If prompted, allow it to open `http://localhost:5173`
+4. To stop both services later, double-click `stop.bat`
+
+## GitHub Publish Checklist
+1. Keep `.env` private and only commit `.env.example`
+2. Do not commit local files like `frontend/node_modules`, `backend/whale_tracker.db`, or pytest temp folders
+3. Keep `frontend/package-lock.json` committed so installs stay reproducible
+4. Run `pytest -q` in `backend`
+5. Run `npm run build` in `frontend`
+6. Commit from the repository root after reviewing `git status`
+
 ## Stack
 - Backend: FastAPI + APScheduler + SQLAlchemy (SQLite default)
 - Frontend: React (Vite)

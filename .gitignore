@@ -205,3 +205,8 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Project-specific local artifacts
+whale-tracker/frontend/node_modules/
+whale-tracker/backend/whale_tracker.db
+whale-tracker/backend/pytest-cache-files-*/

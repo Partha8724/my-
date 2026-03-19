@@ -34,3 +34,67 @@ class AlertOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class SignalOut(BaseModel):
+    symbol: str
+    venue: str
+    bullish_chance: int
+    bearish_chance: int
+    signal: str
+    whale_direction: str
+    total_whale_usd: float
+    event_count: int
+    alert_count: int
+    last_event_type: str
+    last_event_at: datetime
+    summary: str
+    sources: list[str]
+    trend: list[float]
+
+
+class WhaleOrderOut(BaseModel):
+    event_uid: str
+    symbol: str
+    event_type: str
+    amount_usd: float
+    direction: str
+    confidence: float
+    source: str
+    timestamp: datetime
+    from_label: str | None
+    to_label: str | None
+    bias: str
+
+
+class AssistantCoinOut(BaseModel):
+    symbol: str
+    venue: str
+    signal: str
+    outlook: str
+    setup_quality: int
+    bullish_chance: int
+    bearish_chance: int
+    whale_direction: str
+    total_whale_usd: float
+    event_count: int
+    alert_count: int
+    price: float | None
+    change_24h: float | None
+    volume_24h: float | None
+    live_supported: bool
+    summary: str
+    risk_note: str
+    sources: list[str]
+    trend: list[float]
+    last_event_type: str
+    last_event_at: datetime
+
+
+class AssistantBriefOut(BaseModel):
+    generated_at: datetime
+    market_mode: str
+    best_setup: AssistantCoinOut | None
+    best_short: AssistantCoinOut | None
+    watchlist: list[AssistantCoinOut]
+    commentary: list[str]

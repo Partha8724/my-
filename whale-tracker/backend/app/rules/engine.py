@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from app.models.entities import Rule, Event, Alert
+from app.utils import utc_now
 
 
 def in_quiet_hours(now: datetime, quiet_hours: list[list[int]]) -> bool:
@@ -17,10 +18,11 @@ def should_trigger(rule: Rule, event: Event, last_alert: Alert | None = None) ->
         return False, "asset_type mismatch"
     if rule.symbol != "*" and rule.symbol != event.asset_symbol:
         return False, "symbol mismatch"
-    if in_quiet_hours(datetime.utcnow(), rule.quiet_hours or []):
+    now = utc_now()
+    if in_quiet_hours(now, rule.quiet_hours or []):
         return False, "quiet hours"
 
-    if last_alert and (datetime.utcnow() - last_alert.created_at).total_seconds() < rule.cooldown_minutes * 60:
+    if last_alert and (now - last_alert.created_at).total_seconds() < rule.cooldown_minutes * 60:
         return False, "cooldown"
 
     payload = event.payload or {}

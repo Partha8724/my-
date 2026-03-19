@@ -3,6 +3,7 @@ from sqlalchemy import String, Float, DateTime, JSON, UniqueConstraint, Integer,
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
+from app.utils import utc_now
 
 
 class Asset(Base):
@@ -58,7 +59,7 @@ class Alert(Base):
     __table_args__ = (UniqueConstraint("dedupe_key", name="uq_alert_dedupe_key"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, index=True)
     event_uid: Mapped[str] = mapped_column(String(128), index=True)
     rule_name: Mapped[str] = mapped_column(String(128))
     dedupe_key: Mapped[str] = mapped_column(String(256), index=True)

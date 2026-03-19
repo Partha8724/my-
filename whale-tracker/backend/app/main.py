@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.db.session import Base, engine, get_db
 from app.models.entities import Alert, Rule, Asset
-from app.schemas.api import RuleIn, RuleOut, AlertOut
+from app.schemas.api import RuleIn, RuleOut, AlertOut, SignalOut, WhaleOrderOut, AssistantBriefOut
+from app.signals.service import generate_crypto_signals, get_whale_orders, get_assistant_brief
 from app.workers.ingestion import ingestion_service
 
 app = FastAPI(title="Whale Tracker & Cross-Asset Alert")
@@ -61,3 +62,18 @@ def create_rule(payload: RuleIn, db: Session = Depends(get_db)):
 @app.get("/assets")
 def assets(db: Session = Depends(get_db)):
     return db.query(Asset).all()
+
+
+@app.get("/signals", response_model=list[SignalOut])
+def signals(db: Session = Depends(get_db)):
+    return generate_crypto_signals(db)
+
+
+@app.get("/whale-orders", response_model=list[WhaleOrderOut])
+def whale_orders(symbol: str | None = None, limit: int = 30, db: Session = Depends(get_db)):
+    return get_whale_orders(db, symbol=symbol, limit=min(limit, 100))
+
+
+@app.get("/assistant", response_model=AssistantBriefOut)
+async def assistant(db: Session = Depends(get_db)):
+    return await get_assistant_brief(db)
