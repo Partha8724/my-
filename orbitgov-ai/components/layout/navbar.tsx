@@ -1,10 +1,11 @@
 import Link from "next/link";
+import type { Route } from "next";
 
-const links = [
-  ["Exams", "/exams"],
-  ["Dashboard", "/dashboard"],
-  ["AI Assistant", "/ai-assistant"],
-  ["Pricing", "/pricing"]
+const links: Array<{ label: string; href: Route }> = [
+  { label: "Exams", href: "/exams" },
+  { label: "Dashboard", href: "/dashboard" },
+  { label: "AI Assistant", href: "/ai-assistant" },
+  { label: "Pricing", href: "/pricing" }
 ];
 
 export function Navbar() {
@@ -13,7 +14,7 @@ export function Navbar() {
       <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
         <Link href="/" className="text-lg font-semibold text-cyan-300">OrbitGov AI</Link>
         <div className="flex items-center gap-6 text-sm text-slate-200">
-          {links.map(([label, href]) => (
+          {links.map(({ label, href }) => (
             <Link key={href} href={href} className="hover:text-cyan-300">{label}</Link>
           ))}
           <Link href="/signup" className="rounded-full bg-cyan-400 px-4 py-2 font-semibold text-slate-900">Start Free</Link>
